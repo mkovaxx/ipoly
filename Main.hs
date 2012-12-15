@@ -74,8 +74,21 @@ fromExp (Syn opr [e,f]) = do
     _   -> throwError $ "unsupported operator: '" ++ [opr] ++ "'"
 
 toExp :: (Poly String Integer Integer) -> Exp
-toExp (SSum ts) = Con 0
-toExp (VSum ts) = Con 0
+toExp (SSum ts) = foldr (\(t,c) -> \e -> Syn '+' [Syn '*' [Con c, toExpST t], e]) (Con 0) (assoc ts)
+toExp (VSum ts) = foldr (\(t,c) -> \e -> Syn '+' [Syn '*' [Con c, toExpVT t], e]) (Con 0) (assoc ts)
+
+toExpST :: (STerm String Integer) -> Exp
+toExpST (SMul fs) = foldr (\(f,k) -> \e -> Syn '*' [Syn '^' [toExpSA f, Con k], e]) (Con 1) (assoc fs)
+
+toExpVT :: (VTerm String Integer) -> Exp
+toExpVT (VMul v s) = Syn '*' [toExpST s, toExpVA v]
+
+toExpSA :: (SAtom String) -> Exp
+toExpSA (SVar n) = Var n
+toExpSA (SDot v w) = Syn '*' [toExpVA v, toExpVA w]
+
+toExpVA :: (VAtom String) -> Exp
+toExpVA (VVar n) = Var n
 
 -- main logic
 

@@ -20,7 +20,7 @@ along with iPoly.  If not, see <http://www.gnu.org/licenses/>.
 
 -}
 
-module Exp ( Exp(..) ) where
+module Exp ( Exp(..), simplify ) where
 import List
 import Char
 
@@ -32,12 +32,54 @@ data Exp = Con Integer
 instance Show Exp where
   show = concat . intersperse "\n" . showTree "" ""
 
+prec :: Char -> Int
+prec c = case c of
+  '+' -> 1
+  '-' -> 1
+  '*' -> 2
+  '~' -> 3
+  '^' -> 4
+
+render :: Int -> Exp -> String -> String
+render _ (Con c) s = show c ++ s
+render _ (Var n) s = n ++ s
+render outer (Syn '~' [e]) s = "-" ++ left ++ (render inner e $ right ++ s)
+  where
+    inner = prec '~'
+    (left,right) = if outer > inner then ("(",")") else ("","")
+render outer (Syn op [e,f]) s = left ++ (recur e $ [op] ++ recur f (right ++ s))
+  where
+    inner = prec op
+    recur = render inner
+    (left,right) = if outer > inner then ("(",")") else ("","")
+
 simplify :: Exp -> Exp
--- simplify (Sym '^' [])
+simplify (Syn '~' [x]) = case simplify x of
+  (Con c) -> Con $ -c
+  (Syn '~' [e]) -> e
+  (Syn '-' [e,f]) -> Syn '-' [f,e]
+  e -> e
+simplify (Syn op [x,y]) = case (op, simplify x, simplify y) of
+  ('+', Con c, Con d) -> Con $ c+d
+  ('-', Con c, Con d) -> Con $ c-d
+  ('*', Con c, Con d) -> Con $ c*d
+  ('+', Con 0, e) -> e
+  ('+', e, Con 0) -> e
+  ('-', Con 0, e) -> e
+  ('-', e, Con 0) -> e
+  ('*', Con 1, e) -> e
+  ('*', e, Con 1) -> e
+  ('*', e, f) | e==f -> simplify $ Syn '^' [e,Con 2]  -- render V*V as V^2
+  ('^', _, Con 0) -> Con 1
+  ('^', e, Con 1) -> e
+  ('^', Con 0, _) -> Con 0
+  ('^', Con 1, _) -> Con 1
+  ('^', Syn '^' [a,b], c) -> simplify $ Syn '*' [b,c]
+  (op,e,f) -> Syn op [e,f]
 simplify x = x
 
 showTree :: String -> String -> Exp -> [String]
-showTree hp tp (Con n) = [hp ++ show n, tp]
+showTree hp tp (Con n) = [hp ++ "(" ++ show n ++ ")", tp]
 showTree hp tp (Var s) = [hp ++ s, tp]
 showTree hp tp (Syn c es) = (fp ++ head ls) : (map (rp++) $ tail ls)
   where
